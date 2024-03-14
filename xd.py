@@ -1,8 +1,9 @@
 import os
 import sys
-
+import random
 import pygame
 import pygame_gui
+
 
 FPS = 60
 WINDOW_SIZE = WINDOW_WIDTH, WINDOW_HEIGHT = 1280, 960
@@ -47,14 +48,50 @@ class Player(object):
         self.rideCount += 1
 
 
+class Enemy(object):
+    en = [load_image('enemy1_1.png'), load_image(
+        'enemy1_2.png'), load_image('enemy1_3.png')]
+
+    def __init__(self, x, y, width, height, speed, end, velocity):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.end = end
+        self.path = [self.y, self.end]
+        self.rideCount = 0
+        self.speed = speed
+        self.velocity = velocity
+
+    def draw(self, screen):
+        self.move()
+        self.shoot()
+        if self.rideCount + 1 >= 9:
+            self.rideCount = 0
+        screen.blit(self.en[self.rideCount // 3], (self.x, self.y))
+        self.rideCount += 1
+
+    def move(self):
+        if self.y + self.speed < self.path[1]:
+            self.y += self.speed
+        else:
+            self.speed = 0
+
+    def shoot(self):
+        if self.speed == 0:
+            if random.randrange(0, self.velocity * FPS) == 1:
+                bullets.append(Projectile(
+                    round(self.x + self.width // 2), round(self.y + self.height), 3, (255, 255, 225), 14, 1))
+
+
 class Projectile(object):
-    def __init__(self, x, y, radius, color, facing):
+    def __init__(self, x, y, radius, color, speed, facing):
         self.x = x
         self.y = y
         self.radius = radius
         self.color = color
         self.facing = facing
-        self.speed = 18 * facing
+        self.speed = speed * facing
 
     def draw(self, screen):
         pygame.draw.circle(screen, self.color, (self.x, self.y), self.radius)
@@ -63,6 +100,8 @@ class Projectile(object):
 def redrawGameWindow():
     screen.blit(background, (0, 0))
     player.draw(screen)
+    for enemy in enemies:
+        enemy.draw(screen)
     for bullet in bullets:
         bullet.draw(screen)
 
@@ -71,7 +110,10 @@ def redrawGameWindow():
 
 player = Player(100, 100, 30, 30)
 bullets = []
+enemies = [Enemy(random.randrange(0, WINDOW_WIDTH - 50), 0, 50,
+                 50, 4, random.randrange(50, WINDOW_HEIGHT - 500), 3) for _ in range(random.randrange(3, 11))]
 prev_time = pygame.time.get_ticks()
+
 
 running = True
 while running:
@@ -98,7 +140,7 @@ while running:
         if current_time - prev_time > 200:
             prev_time = current_time
             bullets.append(Projectile(
-                round(player.x + player.width // 2), round(player.y), 3, (255, 255, 224), -1))
+                round(player.x + player.width // 2), round(player.y), 3, (255, 255, 224), 18, -1))
 
     if keys[pygame.K_LEFT] or keys[ord('a')]:
         player.x -= player.speed
