@@ -3,6 +3,7 @@ import sys
 import random
 import pygame
 import pygame_gui
+import math
 
 
 FPS = 60
@@ -23,15 +24,21 @@ pygame.init()
 pygame.display.set_caption('ROAD RAGE')
 screen = pygame.display.set_mode(WINDOW_SIZE)
 
-background = pygame.Surface(WINDOW_SIZE)
-background.fill((0, 0, 0))
-
 char = [load_image('player1.png'), load_image(
     'player2.png'), load_image('player3.png')]
+bg = load_image('road.jpg')
+scroll = bg.get_height()
+tiles = math.ceil(WINDOW_HEIGHT / bg.get_height()) + 1
 
 clock = pygame.time.Clock()
 
 score = 0
+
+bulletSound = pygame.mixer.Sound('data/shot.mp3')
+explosionSound = pygame.mixer.Sound('data/kill.mp3')
+
+ingameMusic = pygame.mixer.music.load('data/notmine_level_theme.mp3')
+pygame.mixer.music.play(-1)
 
 
 class Player(object):
@@ -45,6 +52,7 @@ class Player(object):
         self.hitbox = (self.x, self.y, 30, 30)
         self.health = 15
         self.visible = True
+        self.alive = 1
 
     def draw(self, screen):
         if self.visible:
@@ -63,7 +71,13 @@ class Player(object):
         if self.health > 0:
             self.health -= 1
         else:
-            self.visible = False
+            self.death()
+
+    def death(self):
+        if self.alive == 1:
+            explosionSound.play()
+            self.alive = 0
+        self.visible = False
 
 
 class Enemy(object):
@@ -109,12 +123,14 @@ class Enemy(object):
             if random.randrange(0, self.velocity * FPS) == 1:
                 enemy_bullets.append(Projectile(
                     round(self.x + self.width // 2), round(self.y + self.height), 3, (255, 255, 225), 14, 1))
+                bulletSound.play()
 
     def hit(self):
         global score
         if self.health > 0:
             self.health -= 1
         else:
+            explosionSound.play()
             enemies.pop(enemies.index(self))
             score += 1
 
@@ -133,7 +149,14 @@ class Projectile(object):
 
 
 def redrawGameWindow():
-    screen.blit(background, (0, 0))
+    global scroll
+    i = 0
+    while (i < tiles):
+        screen.blit(bg, (0, bg.get_height() * i - scroll))
+        i += 1
+    scroll -= 6
+    if scroll < 0:
+        scroll = bg.get_height()
     text = font.render('УНИЧТОЖЕНО: ' + str(score), 1, (255, 255, 255))
     screen.blit(text, (10, 10))
     player.draw(screen)
@@ -150,15 +173,17 @@ def redrawGameWindow():
 font = pygame.font.Font('data/3712-font.otf', 30)
 player = Player(WINDOW_WIDTH // 2, 900, 30, 30)
 bullets = []
+bullets_removed = set()
 enemy_bullets = []
+enemy_bullets_removed = set()
 enemies = [Enemy(random.randrange(0, WINDOW_WIDTH - 50), 0, 50,
                  50, 4, random.randrange(50, WINDOW_HEIGHT - 500), 3) for _ in range(random.randrange(3, 11))]
 prev_time = pygame.time.get_ticks()
 
-
 running = True
 while running:
     clock.tick(FPS)
+
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
@@ -167,36 +192,55 @@ while running:
         enemies = [Enemy(random.randrange(0, WINDOW_WIDTH - 50), 0, 50,
                          50, 4, random.randrange(50, WINDOW_HEIGHT - 500), 3) for _ in range(random.randrange(3, 11))]
 
+    for enemy in enemies:
+        if player.hitbox[1] < enemy.hitbox[1] + enemy.hitbox[3] and player.hitbox[1] + player.hitbox[3] > enemy.hitbox[1]:
+            if player.hitbox[0] + player.hitbox[2] > enemy.hitbox[0] and player.hitbox[0] < enemy.hitbox[0] + enemy.hitbox[2]:
+                player.hit()
+                enemy.health = 0
+                enemy.hit()
+
     for bullet in bullets:
         for enemy in enemies:
             if bullet.y - bullet.radius < enemy.hitbox[1] + enemy.hitbox[3] and bullet.y + bullet.radius > enemy.hitbox[1]:
                 if bullet.x + bullet.radius > enemy.hitbox[0] and bullet.x - bullet.radius < enemy.hitbox[0] + enemy.hitbox[2]:
                     enemy.hit()
-                    bullets.pop(bullets.index(bullet))
+                    bullets_removed.add(bullet)
+                    bullets = [
+                        bullet for bullet in bullets if bullet not in bullets_removed]
 
         if bullet.x < 1280 and bullet.x > 0:
             pass
         else:
-            bullets.pop(bullets.index(bullet))
+            bullets_removed.add(bullet)
+            bullets = [
+                bullet for bullet in bullets if bullet not in bullets_removed]
         if bullet.y < 960 and bullet.y > 0:
             bullet.y += bullet.speed
         else:
-            bullets.pop(bullets.index(bullet))
+            bullets_removed.add(bullet)
+            bullets = [
+                bullet for bullet in bullets if bullet not in bullets_removed]
 
     for enemy_bullet in enemy_bullets:
         if enemy_bullet.y - enemy_bullet.radius < player.hitbox[1] + player.hitbox[3] and enemy_bullet.y + enemy_bullet.radius > player.hitbox[1]:
             if enemy_bullet.x + enemy_bullet.radius > player.hitbox[0] and enemy_bullet.x - enemy_bullet.radius < player.hitbox[0] + player.hitbox[2]:
                 player.hit()
-                enemy_bullets.pop(enemy_bullets.index(enemy_bullet))
+                enemy_bullets_removed.add(enemy_bullet)
+                enemy_bullets = [
+                    enemy_bullet for enemy_bullet in enemy_bullets if enemy_bullet not in enemy_bullets_removed]
 
         if enemy_bullet.x < 1280 and enemy_bullet.x > 0:
             pass
         else:
-            enemy_bullets.pop(enemy_bullets.index(enemy_bullet))
+            enemy_bullets_removed.add(enemy_bullet)
+            enemy_bullets = [
+                enemy_bullet for enemy_bullet in enemy_bullets if enemy_bullet not in enemy_bullets_removed]
         if enemy_bullet.y < 960 and enemy_bullet.y > 0:
             enemy_bullet.y += enemy_bullet.speed
         else:
-            enemy_bullets.pop(enemy_bullets.index(enemy_bullet))
+            enemy_bullets_removed.add(enemy_bullet)
+            enemy_bullets = [
+                enemy_bullet for enemy_bullet in enemy_bullets if enemy_bullet not in enemy_bullets_removed]
 
     keys = pygame.key.get_pressed()
 
@@ -208,6 +252,7 @@ while running:
                 prev_time = current_time
                 bullets.append(Projectile(
                     round(player.x + player.width // 2), round(player.y), 3, (255, 255, 224), 18, -1))
+                bulletSound.play()
 
     if keys[pygame.K_LEFT] or keys[ord('a')] and player.x > player.speed:
         player.x -= player.speed
